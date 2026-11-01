@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>无畏契约灵敏度生成器 · VAL Sens Forge</title>
+<meta name="description" content="内置 AimLabs 式命中测试与辅助瞄准测试，根据个人瞄准习惯生成可在无畏契约中直接使用（0.001 精度）的灵敏度数值。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11 1h2v6h-2zM11 17h2v6h-2zM1 11h6v2H1zM17 11h6v2h-6zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 1.6a2.4 2.4 0 1 1 0 4.8 2.4 2.4 0 0 1 0-4.8z' fill='%23FF4655'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://miaoda.feishu.cn">
+<link rel="stylesheet" href="https://miaoda.feishu.cn/fonts/css2?family=Chakra+Petch:wght@400;500;600;700&display=swap">
+<script src="https://fastly.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<script>
+/* ECharts 主源失败时切换到 cdnjs 备用镜像 */
+window.addEventListener('error', function(e){
+  if(e.target && e.target.tagName === 'SCRIPT' && /echarts/i.test(e.target.src)){
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js';
+    document.head.appendChild(s);
+  }
+}, true);
+</script>
+<style>
+/* ===== 变量 ===== */
+:root{
+  --bg0:#0A1017;
+  --bg1:#0E1822;
+  --panel:#121D29;
+  --panel2:#172433;
+  --line:#223243;
+  --line2:#33495E;
+  --red:#FF4655;
+  --red-dim:#8E2A33;
+  --teal:#3ED0B4;
+  --amber:#FFB84D;
+  --txt:#ECE8E1;
+  --dim:#8B9BA8;
+  --dim2:#5C6B78;
+  --font-disp:'Chakra Petch','Segoe UI',system-ui,sans-serif;
+  --font-cn:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font-cn);
+  background:var(--bg0);
+  color:var(--txt);
+  line-height:1.6;
+  min-height:100vh;
+  font-size:15px;
+}
+body.lock{overflow:hidden}
+::selection{background:var(--red);color:#fff}
+
+/* ===== 背景装饰层 ===== */
+.bg-fx{
+  position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  background:
+    linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:44px 44px;
+}
+.bg-fx::before{
+  content:'';position:absolute;left:50%;top:0;width:760px;height:420px;transform:translateX(-50%);
+  background:radial-gradient(ellipse at center,rgba(255,70,85,.10),transparent 66%);
+}
+.bg-fx::after{
+  content:'';position:absolute;right:6%;bottom:8%;width:520px;height:320px;
+  background:radial-gradient(ellipse at center,rgba(62,208,180,.07),transparent 66%);
+}
+
+main{
+  position:relative;z-index:1;
+  max-width:1180px;margin:0 auto;padding:20px 16px 90px;
+}
+
+/* ===== 顶栏 ===== */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-bottom:1px solid var(--line);padding:14px 2px 16px;
+  flex-wrap:wrap;
+}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-mark{
+  width:30px;height:30px;flex:0 0 30px;
+  background:linear-gradient(135deg,var(--red),#A52A35);
+  clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);
+  display:flex;align-items:center;justify-content:center;
+}
+.brand-mark svg{width:14px;height:14px;fill:#0A1017}
+.brand-name{
+  font-family:var(--font-disp);font-weight:700;font-size:17px;letter-spacing:.14em;
+  text-transform:uppercase;white-space:nowrap;
+}
+.brand-sub{display:block;font-size:11px;color:var(--dim);letter-spacing:.18em;font-weight:400;margin-top:2px}
+.status-lamp{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);
+  font-family:var(--font-disp);letter-spacing:.12em;text-transform:uppercase;
+  border:1px solid var(--line);padding:7px 12px;
+  background:var(--panel);
+}
+.status-lamp i{width:7px;height:7px;border-radius:50%;background:var(--dim2);flex:0 0 7px}
+.status-lamp.on i{background:var(--teal);box-shadow:0 0 8px var(--teal)}
+.status-lamp.armed i{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+
+/* ===== 区块通用 ===== */
+.section{margin-top:38px}
+.section-head{
+  display:flex;align-items:baseline;gap:12px;margin-bottom:18px;
+  border-left:3px solid var(--red);padding-left:12px;
+}
+.section-head .step{
+  font-family:var(--font-disp);font-weight:700;font-size:15px;color:var(--red);
+  letter-spacing:.1em;
+}
+.section-head h2{font-size:20px;font-weight:600;letter-spacing:.06em}
+.section-head .hint{margin-left:auto;font-size:12px;color:var(--dim);font-weight:400}
+
+/* ===== 01 配置 ===== */
+.config-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.config-card{
+  background:var(--panel);border:1px solid var(--line);
+  padding:16px;position:relative;
+}
+.config-card::before,.config-card::after,
+.test-card::before,.test-card::after,
+.result-panel::before,.result-panel::after{
+  content:'';position:absolute;width:10px;height:10px;pointer-events:none;
+}
+.config-card::before{top:-1px;left:-1px;border-top:2px solid var(--red);border-left:2px solid var(--red)}
+.config-card::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--red);border-right:2px solid var(--red)}
+.config-card label.field-label{
+  display:block;font-size:12px;color:var(--dim);letter-spacing:.14em;margin-bottom:8px;
+  font-family:var(--font-disp);text-transform:uppercase;
+}
+.config-card .sub{font-size:12px;color:var(--dim2);margin-top:8px;line-height:1.5}
+.input-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+input[type=number],input[type=text]{
+  background:var(--bg0);border:1px solid var(--line2);color:var(--txt);
+  font-family:var(--font-disp);font-size:17px;padding:10px 12px;width:130px;
+  transition:border-color .15s;
+}
+input:focus{outline:none;border-color:var(--teal)}
+input::placeholder{color:var(--dim2);font-size:14px}
+.style-group{display:flex;gap:8px;flex-wrap:wrap}
+.style-opt{
+  flex:1;min-width:88px;text-align:center;cursor:pointer;user-select:none;
+  border:1px solid var(--line2);background:var(--bg0);color:var(--dim);
+  padding:10px 8px;font-size:13px;transition:all .15s;
+}
+.style-opt small{display:block;font-size:11px;color:var(--dim2);margin-top:2px}
+.style-opt input{position:absolute;opacity:0;pointer-events:none}
+.style-opt.sel{border-color:var(--red);color:#fff;background:rgba(255,70,85,.12)}
+.style-opt.sel small{color:var(--red)}
+.style-opt:hover{border-color:var(--red)}
+
+/* ===== 02 测试 ===== */
+.test-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.test-card{
+  background:var(--panel);border:1px solid var(--line);
+  padding:18px 16px 16px;position:relative;display:flex;flex-direction:column;gap:10px;
+}
+.test-card::before{top:-1px;left:-1px;border-top:2px solid var(--line2);border-left:2px solid var(--line2)}
+.test-card::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--line2);border-right:2px solid var(--line2)}
+.test-card.done::before{border-color:var(--teal)}
+.test-card.done::after{border-color:var(--teal)}
+.test-card-top{display:flex;align-items:flex-start;gap:12px}
+.test-icon{
+  width:40px;height:40px;flex:0 0 40px;background:var(--bg0);border:1px solid var(--line2);
+  display:flex;align-items:center;justify-content:center;color:var(--dim);
+}
+.test-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6}
+.test-card.done .test-icon{color:var(--teal);border-color:var(--teal)}
+.test-title{font-size:16px;font-weight:600;letter-spacing:.04em}
+.test-title small{display:block;font-size:12px;color:var(--dim);font-weight:400;margin-top:2px}
+.test-desc{font-size:13px;color:var(--dim);line-height:1.55;min-height:40px}
+.test-meta{
+  display:flex;gap:8px;flex-wrap:wrap;font-family:var(--font-disp);font-size:11px;color:var(--dim2);
+}
+.test-meta span{border:1px solid var(--line);padding:3px 8px;background:var(--bg0)}
+.test-actions{display:flex;align-items:center;gap:10px;margin-top:auto}
+.btn{
+  font-family:var(--font-disp);font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  font-size:14px;border:1px solid var(--line2);background:transparent;color:var(--txt);
+  padding:10px 18px;cursor:pointer;transition:all .15s;position:relative;
+  text-align:center;text-decoration:none;display:inline-block;
+}
+.btn:hover{border-color:var(--red);color:#fff;background:rgba(255,70,85,.08)}
+.btn.primary{border-color:var(--red);color:var(--red)}
+.btn.primary:hover{background:var(--red);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.small{padding:7px 12px;font-size:12px}
+.state-pill{
+  font-family:var(--font-disp);font-size:11px;letter-spacing:.12em;color:var(--dim2);
+  border:1px solid var(--line);padding:6px 10px;text-transform:uppercase;margin-left:auto;
+}
+.test-card.done .state-pill{color:var(--teal);border-color:var(--teal)}
+.test-card.running .state-pill{color:var(--amber);border-color:var(--amber)}
+
+/* ===== 03 结果 ===== */
+#result.section{display:none}
+#result.section.show{display:block}
+.result-panel{
+  background:var(--panel);border:1px solid var(--line);padding:22px 16px 18px;
+  position:relative;
+}
+.result-panel::before{top:-1px;left:-1px;border-top:2px solid var(--teal);border-left:2px solid var(--teal)}
+.result-panel::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--teal);border-right:2px solid var(--teal)}
+.result-hero{
+  display:grid;grid-template-columns:1fr;gap:18px;margin-bottom:20px;
+}
+.sens-block{text-align:center;padding:18px 12px;background:var(--bg0);border:1px solid var(--line2)}
+.sens-label{font-family:var(--font-disp);font-size:12px;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
+.sens-value{
+  font-family:var(--font-disp);font-weight:700;font-size:64px;line-height:1.1;color:#fff;
+  letter-spacing:.02em;font-variant-numeric:tabular-nums;
+}
+.sens-value .unit{font-size:20px;color:var(--dim);font-weight:500}
+.sens-sub{font-size:13px;color:var(--dim);margin-top:6px}
+.sens-sub b{color:var(--teal);font-weight:600}
+.tweak-row{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+.tweak-row .btn.small{color:var(--dim);border-color:var(--line2)}
+.tweak-row .btn.small:hover{border-color:var(--teal);color:var(--teal);background:rgba(62,208,180,.08)}
+.tweak-row .btn.small.active{border-color:var(--teal);color:var(--teal);background:rgba(62,208,180,.12)}
+.gen-bar{
+  margin-top:22px;display:flex;align-items:center;gap:14px;justify-content:center;
+  flex-wrap:wrap;padding:16px;border:1px dashed var(--line2);background:rgba(18,29,41,.4);
+}
+.gen-bar .btn.lg{font-size:16px;padding:13px 30px}
+.gen-note{font-size:12.5px;color:var(--dim2);max-width:300px;line-height:1.6}
+.apply-guide{
+  background:var(--bg0);border:1px solid var(--line);padding:16px;
+}
+.apply-guide h4{
+  font-size:14px;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:8px;
+}
+.apply-guide h4::before{content:'';width:8px;height:8px;background:var(--amber);flex:0 0 8px}
+.apply-guide ol{margin-left:18px;font-size:13.5px;color:var(--txt)}
+.apply-guide li{margin-bottom:8px}
+.apply-guide code{
+  font-family:var(--font-disp);background:var(--panel2);color:var(--teal);
+  padding:1px 6px;font-size:13px;border:1px solid var(--line);
+}
+.apply-guide .note{font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.6}
+.ads-row{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}
+.ads-row label{font-size:13px;color:var(--dim)}
+.ads-row input{width:86px;font-size:16px;padding:8px 10px}
+
+.result-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:18px}
+.chart-box{background:var(--bg0);border:1px solid var(--line);padding:12px 10px 6px}
+.chart-box h4{
+  font-size:13px;color:var(--dim);letter-spacing:.12em;font-family:var(--font-disp);
+  text-transform:uppercase;padding:0 6px 4px;
+}
+.chart-box .chart{width:100%;height:230px}
+.chart-box.full{grid-column:1 / -1}
+.chart-box .chart.tall{height:190px}
+
+.metrics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:18px}
+.metric{
+  background:var(--bg0);border:1px solid var(--line);padding:12px 14px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.metric .k{font-size:11px;color:var(--dim2);letter-spacing:.12em;font-family:var(--font-disp);text-transform:uppercase}
+.metric .v{font-size:20px;font-family:var(--font-disp);font-weight:600;font-variant-numeric:tabular-nums}
+.metric .v em{font-style:normal;color:var(--teal)}
+.metric .v.warn em{color:var(--amber)}
+.metric .s{font-size:11px;color:var(--dim2)}
+.reason-list{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.reason-list h5{font-size:13px;color:var(--dim);margin-bottom:8px;letter-spacing:.1em}
+.reason-list li{font-size:13px;color:var(--txt);margin:4px 0 4px 16px}
+.reason-list li::marker{color:var(--red)}
+.eDPI-bar{margin-top:16px}
+.eDPI-bar .lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:6px}
+.eDPI-track{
+  position:relative;height:26px;background:var(--bg0);border:1px solid var(--line2);
+  overflow:hidden;
+}
+.eDPI-pro{position:absolute;inset:0;background:linear-gradient(90deg,var(--red-dim),var(--red))}
+.eDPI-pro .mark{
+  position:absolute;top:-3px;bottom:-3px;width:3px;background:#fff;
+  box-shadow:0 0 6px rgba(255,255,255,.8);
+}
+.eDPI-markers{position:relative;height:20px;margin-top:6px}
+.eDPI-markers span{
+  position:absolute;top:0;transform:translateX(-50%);font-size:11px;color:var(--dim);
+  font-family:var(--font-disp);
+}
+
+/* ===== 测试全屏 overlay ===== */
+#overlay{
+  position:fixed;inset:0;z-index:50;background:var(--bg0);display:none;
+  flex-direction:column;overflow:hidden;cursor:none;
+}
+#overlay.show{display:flex}
+#overlay .ov-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background:
+    linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:64px 64px;
+}
+#overlay .ov-top{
+  position:relative;z-index:3;display:flex;align-items:center;gap:14px;
+  padding:16px 20px;border-bottom:1px solid var(--line);background:rgba(18,29,41,.9);
+  flex-wrap:wrap;
+}
+.ov-clock{
+  font-family:var(--font-disp);font-weight:700;font-size:30px;font-variant-numeric:tabular-nums;
+  color:#fff;letter-spacing:.05em;
+}
+.ov-clock.warn{color:var(--amber)}
+.ov-stat{font-family:var(--font-disp);font-size:13px;color:var(--dim);letter-spacing:.1em}
+.ov-stat b{color:var(--teal);font-size:18px;font-weight:600}
+.ov-bar-wrap{flex:1 1 120px;height:6px;background:var(--bg0);border:1px solid var(--line);min-width:90px}
+.ov-bar{height:100%;width:100%;background:var(--red);transition:width .12s linear}
+.ov-exit{
+  margin-left:auto;font-family:var(--font-disp);font-size:13px;letter-spacing:.1em;cursor:pointer;
+  color:var(--dim);border:1px solid var(--line2);padding:8px 14px;background:var(--panel);
+  text-transform:uppercase;
+}
+.ov-exit:hover{color:var(--red);border-color:var(--red)}
+#stage{
+  position:relative;flex:1;z-index:2;overflow:hidden;
+}
+#stage .hint{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-family:var(--font-disp);font-size:15px;letter-spacing:.16em;color:var(--dim2);
+  text-transform:uppercase;text-align:center;line-height:1.8;pointer-events:none;
+  z-index:1;
+}
+#stage .hint b{color:var(--amber)}
+.ov-foot{
+  position:relative;z-index:3;display:flex;gap:18px;justify-content:center;align-items:center;
+  padding:12px 16px;border-top:1px solid var(--line);background:rgba(18,29,41,.9);
+  font-size:12px;color:var(--dim2);font-family:var(--font-disp);letter-spacing:.1em;
+  text-transform:uppercase;flex-wrap:wrap;
+}
+
+/* 目标 */
+.target{
+  position:absolute;left:0;top:0;will-change:transform;display:none;z-index:4;
+  transform:translate(0,0);
+}
+.target .ring{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;
+}
+.target .core{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;
+}
+/* 测试A 反应命中：红色圆环+红点 */
+.target.t-react .ring{width:78px;height:78px;border:2.5px solid var(--red);box-shadow:0 0 14px rgba(255,70,85,.5), inset 0 0 14px rgba(255,70,85,.25)}
+.target.t-react .core{width:10px;height:10px;background:var(--red);box-shadow:0 0 8px var(--red)}
+/* 测试B 精度瞄准：细白环+青色点 */
+.target.t-precise .ring{width:32px;height:32px;border:2px solid rgba(236,232,225,.9)}
+.target.t-precise .core{width:4px;height:4px;background:var(--teal);box-shadow:0 0 6px var(--teal)}
+/* 测试C 动态追踪：青色菱形 */
+.target.t-track .ring{
+  width:52px;height:52px;border:2px solid var(--teal);
+  transform:translate(-50%,-50%) rotate(45deg);border-radius:4px;
+  box-shadow:0 0 12px rgba(62,208,180,.4);
+}
+.target.t-track .core{width:6px;height:6px;background:var(--teal);box-shadow:0 0 6px var(--teal)}
+
+/* 准星 */
+#crosshair{
+  position:fixed;left:0;top:0;z-index:60;pointer-events:none;display:none;
+  width:0;height:0;
+}
+#crosshair.show{display:block}
+.ch-line{position:absolute;background:var(--teal);box-shadow:0 0 4px rgba(62,208,180,.5)}
+.ch-h{width:22px;height:2px;left:-11px;top:-1px}
+.ch-v{width:2px;height:22px;left:-1px;top:-11px}
+.ch-dot{position:absolute;width:3px;height:3px;border-radius:50%;background:var(--teal);left:-1.5px;top:-1.5px}
+.ch-ring{
+  position:absolute;width:18px;height:18px;border-radius:50%;border:1.5px solid rgba(62,208,180,.75);
+  left:-9px;top:-9px;
+}
+#crosshair.lock-red .ch-line,#crosshair.lock-red .ch-dot,#crosshair.lock-red .ch-ring{border-color:var(--red);background:var(--red)}
+
+/* 命中粒子 */
+.fx{
+  position:fixed;z-index:61;pointer-events:none;width:4px;height:4px;border-radius:50%;
+  background:var(--red);animation:fx-burst .5s ease-out forwards;
+}
+.fx.teal{background:var(--teal)}
+@keyframes fx-burst{
+  0%{opacity:1;transform:translate(0,0) scale(1)}
+  100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.25)}
+}
+
+/* toast */
+#toast{
+  position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);border:1px solid var(--red);color:var(--txt);
+  padding:12px 22px;font-size:14px;z-index:99;opacity:0;pointer-events:none;
+  transition:all .2s;max-width:calc(100vw - 32px);text-align:center;
+  box-shadow:0 6px 24px rgba(0,0,0,.5);
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* footer */
+footer{
+  position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 16px 40px;
+  border-top:1px solid var(--line);padding-top:18px;
+}
+footer p{font-size:12.5px;color:var(--dim2);line-height:1.7;margin-bottom:6px}
+footer a{color:var(--dim);text-decoration:underline;text-underline-offset:3px}
+
+/* ===== 响应式：桌面增强 ===== */
+@media (min-width:768px){
+  body{font-size:15px}
+  main{padding:26px 28px 100px}
+  .config-grid{grid-template-columns:repeat(3,1fr)}
+  .test-grid{grid-template-columns:repeat(3,1fr)}
+  .test-card{min-height:252px}
+  .result-hero{grid-template-columns:1.15fr 1fr;align-items:stretch}
+  .sens-value{font-size:78px}
+  .result-grid{grid-template-columns:repeat(2,1fr)}
+  .metrics-grid{grid-template-columns:repeat(4,1fr)}
+  .section{margin-top:46px}
+  .section-head h2{font-size:22px}
+  .chart-box .chart{height:260px}
+  .chart-box .chart.tall{height:240px}
+  .brand-name{font-size:19px}
+}
+@media (min-width:1100px){
+  .result-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="bg-fx" aria-hidden="true"></div>
+
+<main>
+  <!-- ===== 顶栏 ===== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24"><path d="M11 1h2v6h-2zM11 17h2v6h-2zM1 11h6v2H1zM17 11h6v2h-6z"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">VAL Sens Forge</div>
+        <div class="brand-sub">无畏契约专属灵敏度生成器</div>
+      </div>
+    </div>
+    <div class="status-lamp" id="statusLamp"><i></i><span id="statusText">待配置</span></div>
+  </header>
+
+  <!-- ===== 01 基础配置 ===== -->
+  <section class="section" id="config">
+    <div class="section-head">
+      <span class="step">01</span>
+      <h2>基础配置</h2>
+      <span class="hint">用于把测试结果换算成游戏内数值</span>
+    </div>
+    <div class="config-grid">
+      <div class="config-card">
+        <label class="field-label" for="dpi">鼠标 DPI（必填）</label>
+        <div class="input-row">
+          <input type="number" id="dpi" min="100" max="16000" step="50" placeholder="如 800">
+        </div>
+        <p class="sub">DPI 请从鼠标驱动软件查看（罗技 G HUB、雷蛇 Synapse、钢厂 Engine 等），或鼠标底部标注。生成器无法自行测出 DPI，必须由你提供。</p>
+      </div>
+      <div class="config-card">
+        <label class="field-label">瞄准流派</label>
+        <div class="style-group" id="styleGroup">
+          <label class="style-opt">
+            <input type="radio" name="style" value="wrist">
+            手腕流<small>高敏 · 甩枪快</small>
+          </label>
+          <label class="style-opt sel">
+            <input type="radio" name="style" value="hybrid" checked>
+            混合流<small>折中 · 推荐</small>
+          </label>
+          <label class="style-opt">
+            <input type="radio" name="style" value="arm">
+            手臂流<small>低敏 · 更稳</small>
+          </label>
+        </div>
+      </div>
+      <div class="config-card">
+        <label class="field-label" for="curSens">当前游戏灵敏度（可选）</label>
+        <div class="input-row">
+          <input type="number" id="curSens" min="0.001" max="20" step="0.001" placeholder="如 0.352">
+        </div>
+        <p class="sub">填上你正在用的灵敏度，生成器将以你的现状为基准微调；留空则从职业选手主流区间起步。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 02 瞄准测试 ===== -->
+  <section class="section" id="tests">
+    <div class="section-head">
+      <span class="step">02</span>
+      <h2>瞄准测试</h2>
+      <span class="hint">三项测试均 30 秒 · 鼠标悬停目标即命中 · Esc 可退出</span>
+    </div>
+    <div class="test-grid">
+      <div class="test-card" id="cardReact">
+        <div class="test-card-top">
+          <div class="test-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>
+          </div>
+          <div class="test-title">AimLabs 反应命中
+            <small>大目标 · 反应速度 · 命中效率</small>
+          </div>
+          <div class="state-pill" id="pillReact">待测试</div>
+        </div>
+        <p class="test-desc">大号红色圆环随机出现，鼠标碰到即命中。测量你的反应时间与移动路径效率，判断过冲倾向。</p>
+        <div class="test-meta">
+          <span>30 秒</span><span>悬停触发</span><span>0.7s 延迟换靶</span>
+        </div>
+        <div class="test-actions">
+          <button class="btn primary" data-test="react">开始测试</button>
+        </div>
+      </div>
+      <div class="test-card" id="cardPrecise">
+        <div class="test-card-top">
+          <div class="test-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div class="test-title">精度瞄准
+            <small>小目标 · 准星校准 · 微调精度</small>
+          </div>
+          <div class="state-pill" id="pillPrecise">待测试</div>
+        </div>
+        <p class="test-desc">隐藏系统光标，改用战术准星。小号目标随机出现，准星碰到即命中，统计命中误差与微调能力。</p>
+        <div class="test-meta">
+          <span>30 秒</span><span>准星模式</span><span>0.5s 延迟换靶</span>
+        </div>
+        <div class="test-actions">
+          <button class="btn primary" data-test="precise">开始测试</button>
+        </div>
+      </div>
+      <div class="test-card" id="cardTrack">
+        <div class="test-card-top">
+          <div class="test-icon">
+            <svg viewBox="0 0 24 24"><path d="M4 12h6m4 0h6M10 9v6l4-3z"/></svg>
+          </div>
+          <div class="test-title">动态追踪
+            <small>移动目标 · 跟枪能力 · 灵敏度方向</small>
+          </div>
+          <div class="state-pill" id="pillTrack">待测试</div>
+        </div>
+        <p class="test-desc">青色目标匀速运动、边缘反弹。准星悬停其上 0.25 秒即命中，判断你是否跟得住移动目标。</p>
+        <div class="test-meta">
+          <span>30 秒</span><span>悬停 0.25s</span><span>反弹边界</span>
+        </div>
+        <div class="test-actions">
+          <button class="btn primary" data-test="track">开始测试</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="gen-bar">
+    <button class="btn primary lg" id="genBtn">生成我的灵敏度</button>
+    <span class="gen-note">建议先完成全部三项测试再生成；仅完成部分测试也会给出基于现有数据的参考值。</span>
+  </div>
+
+  <!-- ===== 03 结果 ===== -->
+  <section class="section" id="result">
+    <div class="section-head">
+      <span class="step">03</span>
+      <h2>灵敏度结果</h2>
+      <span class="hint">依据测试表现换算 · 支持 0.001 精度</span>
+    </div>
+    <div class="result-panel">
+      <div class="result-hero">
+        <div class="sens-block">
+          <div class="sens-label">推荐游戏内灵敏度</div>
+          <div class="sens-value" id="sensValue">—<span class="unit"></span></div>
+          <div class="sens-sub">对应 eDPI <b id="edpiOut">—</b> · 与职业选手主流区间 200–360 的关系见下方刻度</div>
+          <div class="tweak-row" id="tweakRow">
+            <button class="btn small" data-tweak="-0.05">-5%</button>
+            <button class="btn small active" data-tweak="0">推荐</button>
+            <button class="btn small" data-tweak="0.05">+5%</button>
+          </div>
+        </div>
+        <div class="apply-guide">
+          <h4>如何应用到无畏契约</h4>
+          <ol>
+            <li>打开游戏：<code>设置</code> → <code>常规</code> → <code>鼠标</code>。</li>
+            <li>在 <code>灵敏度：瞄准</code> 一栏<strong>手动输入</strong>右侧生成的三位小数数值（如 0.352），直接键入精确值，不要只拖滑块。</li>
+            <li>同一页面向下找到 <code>瞄准镜灵敏度倍率</code>，按下方建议值填入（多数职业选手为 1.00）。</li>
+            <li>进靶场开几枪试手感，如偏快/偏慢，用页面上的 <code>-5% / +5%</code> 微调并同步进游戏。</li>
+          </ol>
+          <div class="ads-row">
+            <label for="ads">瞄准镜灵敏度倍率</label>
+            <input type="number" id="ads" min="0.1" max="10" step="0.05" value="1.00">
+            <span class="note" style="font-size:12px;color:var(--dim2)">游戏内范围 0.1–10，默认 1.00</span>
+          </div>
+          <p class="note">无畏契约使用原始输入，游戏内灵敏度与 Windows 指针速度无关；灵敏度 = eDPI ÷ 鼠标 DPI，任何 DPI 下该数值都有效。生成值已按当前版本 0.001 精度步进，可直接键入。</p>
+        </div>
+      </div>
+
+      <div class="eDPI-bar">
+        <div class="lbl"><span>eDPI 刻度</span><span id="edpiLbl">—</span></div>
+        <div class="eDPI-track" id="edpiTrack">
+          <div class="eDPI-pro" id="edpiPro" style="width:0"></div>
+        </div>
+        <div class="eDPI-markers">
+          <span style="left:0%">100</span>
+          <span style="left:20%">200</span>
+          <span style="left:40%">300</span>
+          <span style="left:60%">400</span>
+          <span style="left:80%">500</span>
+          <span style="left:100%">600</span>
+        </div>
+      </div>
+
+      <div class="metrics-grid" id="metricsGrid">
+        <div class="metric"><span class="k">反应命中 每分钟</span><span class="v" id="mReactHpm">—</span><span class="s">越接近 60 越好</span></div>
+        <div class="metric"><span class="k">反应命中 平均反应</span><span class="v" id="mReactRt">—</span><span class="s">0.30s 内为优秀</span></div>
+        <div class="metric"><span class="k">精度 平均命中误差</span><span class="v" id="mPreciseErr">—</span><span class="s">越小越准</span></div>
+        <div class="metric"><span class="k">追踪 悬停命中数</span><span class="v" id="mTrackHits">—</span><span class="s">跟枪能力</span></div>
+      </div>
+
+      <div class="reason-list" id="reasonList"></div>
+
+      <div class="result-grid">
+        <div class="chart-box full">
+          <h4>反应时间序列（反应命中测试）</h4>
+          <div class="chart tall" id="chartReact"></div>
+        </div>
+        <div class="chart-box">
+          <h4>三项测试表现对比</h4>
+          <div class="chart" id="chartCompare"></div>
+        </div>
+        <div class="chart-box">
+          <h4>命中质量构成</h4>
+          <div class="chart" id="chartQuality"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>本生成器为个人训练辅助工具：灵敏度推荐基于主流职业选手 eDPI 分布（200–360）与你的测试行为特征推断，用于给出方向性建议与可直接键入的数值，不承诺替代实战磨合。建议以推荐值为起点，保留两周固定手感后再微调。</p>
+  <p>测试全部在浏览器本地完成，不上传任何数据。目标悬停即触发，无需点击；若测试中鼠标移出窗口导致准星丢失，按下 Esc 退出后重新开始即可。</p>
+</footer>
+
+<!-- ===== 测试全屏层 ===== -->
+<div id="overlay">
+  <div class="ov-grid" aria-hidden="true"></div>
+  <div class="ov-top">
+    <span class="ov-clock" id="ovClock">00:30</span>
+    <span class="ov-stat">命中 <b id="ovHits">0</b></span>
+    <span class="ov-stat" id="ovMode">—</span>
+    <div class="ov-bar-wrap"><div class="ov-bar" id="ovBar"></div></div>
+    <span class="ov-exit" id="ovExit">Esc 退出</span>
+  </div>
+  <div id="stage">
+    <div class="hint" id="stageHint">准备开始 · 鼠标悬停目标即命中<br><b>移动鼠标瞄准</b>，无需点击</div>
+    <div class="target" id="targetEl">
+      <div class="ring"></div>
+      <div class="core"></div>
+    </div>
+  </div>
+  <div class="ov-foot">
+    <span id="ovFootHint">悬停命中 · 不点击</span>
+    <span>Esc 退出测试</span>
+    <span id="ovFpsHint" style="display:none">追踪目标：悬停累计 0.25s 命中</span>
+  </div>
+</div>
+<div id="crosshair">
+  <div class="ch-line ch-h"></div>
+  <div class="ch-line ch-v"></div>
+  <div class="ch-ring"></div>
+  <div class="ch-dot"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ===== JS-PART1: 测试核心 ===== */
+(function(){
+'use strict';
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+
+/* ---- 元素引用 ---- */
+var overlay  = $('#overlay');
+var stage    = $('#stage');
+var targetEl = $('#targetEl');
+var cross    = $('#crosshair');
+var ovClock  = $('#ovClock');
+var ovBar    = $('#ovBar');
+var ovHits   = $('#ovHits');
+var ovMode   = $('#ovMode');
+var ovFootHint = $('#ovFootHint');
+var stageHint  = $('#stageHint');
+var toastEl  = $('#toast');
+var pillMap  = { react:$('#pillReact'), precise:$('#pillPrecise'), track:$('#pillTrack') };
+var cardMap  = { react:$('#cardReact'), precise:$('#cardPrecise'), track:$('#cardTrack') };
+
+/* ---- 全局测试状态 ---- */
+var state = {
+  mode:null, running:false,
+  dur:30000, endAt:0,
+  hits:0, records:[], forcedSkips:0,
+  target:{x:0,y:0,r:0,vx:0,vy:0,born:0,lineD:0},
+  lastC:{x:0,y:0},
+  moveAccum:0, inTarget:false,
+  dwell:0, captureStart:0, crossPrev:null, crossCount:0,
+  errSum:0, errN:0, lastNow:0,
+  spawnDelayUntil:0, raf:0,
+  stageRect:null,
+  results:{react:null, precise:null, track:null}
+};
+var MODE_META = {
+  react:   { r:38, delay:[350,700], label:'反应命中' },
+  precise: { r:15, delay:[350,600], label:'精度瞄准' },
+  track:   { r:24, delay:[450,700], label:'动态追踪' }
+};
+
+/* ---- 工具 ---- */
+function rand(a,b){ return a + Math.random()*(b-a); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function round3(v){ return Math.round(v*1000)/1000; }
+function fmtMs(v){ return v.toFixed(2)+'s'; }
+function updateStageRect(){ state.stageRect = stage.getBoundingClientRect(); }
+window.addEventListener('resize', updateStageRect);
+
+/* ---- Toast ---- */
+var toastTimer=0;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 2600);
+}
+
+/* ---- 命中粒子特效 ---- */
+function spawnFx(x,y,teal){
+  var n = 10, i;
+  for(i=0;i<n;i++){
+    var p = document.createElement('div');
+    p.className = 'fx' + (teal ? ' teal' : '');
+    var ang = Math.random()*Math.PI*2;
+    var dist = rand(18, 52);
+    p.style.left = (x-2)+'px';
+    p.style.top  = (y-2)+'px';
+    p.style.setProperty('--dx', (Math.cos(ang)*dist).toFixed(0)+'px');
+    p.style.setProperty('--dy', (Math.sin(ang)*dist).toFixed(0)+'px');
+    document.body.appendChild(p);
+    (function(el){ setTimeout(function(){ el.remove(); }, 520); })(p);
+  }
+}
+
+/* ---- 准星 ---- */
+function showCross(x,y){
+  cross.classList.add('show');
+  cross.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+}
+function hideCross(){
+  cross.classList.remove('show');
+}
+
+/* ---- 生成目标 ---- */
+function spawnTarget(now){
+  var rect = state.stageRect;
+  var meta = MODE_META[state.mode];
+  var r = meta.r;
+  var pad = r + 70;
+  var w = rect.width, h = rect.height;
+  var x, y, tries = 0, minD = 210;
+  var prevX = state.target.x, prevY = state.target.y;
+  do {
+    x = pad + Math.random()*(w-2*pad);
+    y = pad + Math.random()*(h-2*pad);
+    tries++;
+  } while (tries < 24 && Math.hypot(x-prevX, y-prevY) < minD);
+  var sp = 0, ang = 0;
+  if (state.mode === 'track') {
+    sp = rand(150, 250);
+    ang = Math.random()*Math.PI*2;
+  }
+  state.target = {
+    x:x, y:y, r:r,
+    vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp,
+    born:now,
+    lineD:Math.hypot(x - state.lastC.x, y - state.lastC.y)
+  };
+  state.moveAccum = 0;
+  state.inTarget = false;
+  state.dwell = 0;
+  state.captureStart = now;
+  state.crossCount = 0;
+  state.crossPrev = null;
+  state.errSum = 0;
+  state.errN = 0;
+  targetEl.className = 'target t-' + state.mode;
+  targetEl.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+  targetEl.style.display = 'block';
+  if (state.mode === 'track') state.lastNow = now;
+}
+
+/* ---- 命中处理 ---- */
+function onHit(cx, cy, d){
+  if (!state.running) return;
+  var t = state.target;
+  if (t.r <= 0) return;
+  var now = performance.now();
+  var rt = (now - t.born)/1000;
+  var ratio = t.lineD > 0 ? state.moveAccum / t.lineD : 1;
+  var errRatio = d / t.r;
+  var rec = { rt:rt, ratio:ratio, errRatio:errRatio, over:false, under:false, cross:false };
+  if (ratio > 1.28) rec.over = true;
+  if (errRatio > 0.6) rec.under = true;
+  if (state.mode === 'track' && state.crossCount >= 2) rec.cross = true;
+  state.records.push(rec);
+  state.hits++;
+  spawnFx(cx, cy, state.mode === 'track');
+  t.r = 0;
+  targetEl.style.display = 'none';
+  state.spawnDelayUntil = now + rand(MODE_META[state.mode].delay[0], MODE_META[state.mode].delay[1]);
+}
+
+/* ---- 追踪测试：每帧更新移动目标 ---- */
+function updateTrackTarget(now){
+  var t = state.target;
+  if (t.r <= 0) return;
+  var dt = (now - state.lastNow)/1000;
+  if (dt <= 0 || dt > 0.2) dt = 0.016;
+  state.lastNow = now;
+  t.x += t.vx*dt;
+  t.y += t.vy*dt;
+  var rect = state.stageRect;
+  if (t.x < t.r)      { t.x = t.r;      t.vx = Math.abs(t.vx); }
+  if (t.x > rect.width  - t.r) { t.x = rect.width  - t.r; t.vx = -Math.abs(t.vx); }
+  if (t.y < t.r)      { t.y = t.r;      t.vy = Math.abs(t.vy); }
+  if (t.y > rect.height - t.r) { t.y = rect.height - t.r; t.vy = -Math.abs(t.vy); }
+  targetEl.style.transform = 'translate(' + t.x + 'px,' + t.y + 'px)';
+
+  var d = Math.hypot(state.lastC.x - t.x, state.lastC.y - t.y);
+  state.errSum += d; state.errN++;
+  if (d <= t.r) {
+    state.dwell += dt;
+    if (state.dwell >= 0.25) { onHit(state.lastC.x, state.lastC.y, d); return; }
+    var rel = state.lastC.x - t.x;
+    var sign = rel === 0 ? 0 : (rel > 0 ? 1 : -1);
+    if (state.crossPrev !== null && sign !== 0 && sign !== state.crossPrev) state.crossCount++;
+    if (sign !== 0) state.crossPrev = sign;
+  } else {
+    state.dwell = Math.max(0, state.dwell - dt*2);
+    state.crossPrev = null;
+  }
+}
+
+/* ---- 主循环：倒计时基于 endAt 时间戳，绝不依赖帧数 ---- */
+function tick(now){
+  if (!state.running) return;
+  var remain = state.endAt - now;
+  if (remain <= 0) { endTest(); return; }
+  var sec = Math.max(0, Math.ceil(remain/1000));
+  ovClock.textContent = '00:' + String(sec).padStart(2,'0');
+  ovClock.classList.toggle('warn', remain < 5000);
+  ovBar.style.width = (remain/state.dur*100) + '%';
+  ovHits.textContent = state.hits;
+  if (state.mode === 'track') updateTrackTarget(now);
+  /* 目标超时未命中则强制换位，避免卡在远处 */
+  if (state.target.r > 0 && now - state.target.born > 4000) {
+    state.forcedSkips++;
+    state.target.r = 0;
+    targetEl.style.display = 'none';
+    state.spawnDelayUntil = now + 300;
+  }
+  if (state.target.r <= 0 && now >= state.spawnDelayUntil) {
+    spawnTarget(now);
+  }
+  state.raf = requestAnimationFrame(tick);
+}
+
+/* ---- 开始测试 ---- */
+function startTest(mode){
+  if (state.running) return;
+  state.mode = mode;
+  state.running = true;
+  state.hits = 0;
+  state.records = [];
+  state.forcedSkips = 0;
+  state.target.r = 0;
+  state.spawnDelayUntil = 0;
+  state.errSum = 0; state.errN = 0;
+
+  overlay.classList.add('show');
+  document.body.classList.add('lock');
+  updateStageRect();
+  state.lastC = { x: window.innerWidth/2, y: window.innerHeight/2 };
+  showCross(state.lastC.x, state.lastC.y);
+  stageHint.innerHTML = '测试开始 · 鼠标悬停目标即命中<br><b>保持鼠标在窗口内</b>';
+  ovMode.textContent = MODE_META[mode].label;
+  ovFootHint.textContent = (mode === 'track')
+    ? '追踪目标：悬停累计 0.25s 命中'
+    : '悬停命中 · 不点击 · 无需按鼠标';
+  ovClock.textContent = '00:30';
+  ovBar.style.width = '100%';
+  ovHits.textContent = '0';
+
+  cardMap[mode].classList.add('running');
+  pillMap[mode].textContent = '测试中';
+  $$('.test-card').forEach(function(c){ if(c !== cardMap[mode]) c.classList.remove('running'); });
+
+  state.endAt = performance.now() + state.dur;
+  state.lastNow = performance.now();
+  state.raf = requestAnimationFrame(tick);
+}
+
+/* ---- 结束测试与结算 ---- */
+function endTest(){
+  if (!state.running) return;
+  state.running = false;
+  cancelAnimationFrame(state.raf);
+  state.target.r = 0;
+  targetEl.style.display = 'none';
+  hideCross();
+  overlay.classList.remove('show');
+  document.body.classList.remove('lock');
+
+  var mode = state.mode;
+  var modeName = MODE_META[mode].label;
+  cardMap[mode].classList.remove('running');
+  cardMap[mode].classList.add('done');
+  pillMap[mode].textContent = '已完成';
+
+  var recs = state.records;
+  var n = recs.length;
+  var sumRT = 0, sumRatio = 0, sumErr = 0, overN = 0, underN = 0, crossN = 0;
+  recs.forEach(function(r){
+    sumRT += r.rt; sumRatio += r.ratio; sumErr += r.errRatio;
+    if (r.over) overN++;
+    if (r.under) underN++;
+    if (r.cross) crossN++;
+  });
+  var minutes = state.dur/60000;
+  var res = {
+    hits: state.hits,
+    hpm: round3(state.hits/minutes),
+    avgRT: n ? sumRT/n : 0,
+    avgRatio: n ? sumRatio/n : 0,
+    avgErrRatio: n ? sumErr/n : 0,
+    overRate: n ? overN/n : 0,
+    underRate: n ? underN/n : 0,
+    crossRate: n ? crossN/n : 0,
+    forcedSkips: state.forcedSkips,
+    n: n
+  };
+  state.results[mode] = res;
+
+  updateStatusText();
+  var done = doneCount();
+  if (done >= 1) {
+    setTimeout(function(){
+      var rs = $('#result');
+      rs.classList.add('show');
+      rs.scrollIntoView({ behavior:'smooth', block:'start' });
+      window.dispatchEvent(new CustomEvent('sens:tests-updated'));
+    }, 350);
+  }
+  toast(modeName + '测试完成：命中 ' + state.hits + ' 次' + (n ? '，平均反应 ' + fmtMs(res.avgRT) : ''));
+}
+
+function doneCount(){
+  var c = 0;
+  ['react','precise','track'].forEach(function(m){ if (state.results[m]) c++; });
+  return c;
+}
+function updateStatusText(){
+  var lamp = $('#statusLamp');
+  var txt = $('#statusText');
+  if (doneCount() === 3) {
+    lamp.classList.remove('on','armed'); lamp.classList.add('armed');
+    txt.textContent = '可生成灵敏度';
+  } else if (doneCount() >= 1) {
+    lamp.classList.remove('armed'); lamp.classList.add('on');
+    txt.textContent = '测试进行中 ' + doneCount() + '/3';
+  } else {
+    lamp.classList.remove('on','armed');
+    txt.textContent = '待配置';
+  }
+}
+
+/* ---- 事件绑定 ---- */
+$$('.btn[data-test]').forEach(function(b){
+  b.addEventListener('click', function(){
+    startTest(b.getAttribute('data-test'));
+  });
+});
+$('#ovExit').addEventListener('click', function(){ endTest(); });
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && state.running) endTest();
+});
+
+/* overlay 指针事件：准星跟随 + 悬停命中 */
+overlay.addEventListener('pointermove', function(e){
+  if (!state.running) return;
+  var cx = e.clientX, cy = e.clientY;
+  state.lastC = { x:cx, y:cy };
+  showCross(cx, cy);
+  var t = state.target;
+  if (t.r <= 0) return;
+  var rect = state.stageRect;
+  var ax = rect.left + t.x, ay = rect.top + t.y;
+  var d = Math.hypot(cx - ax, cy - ay);
+  if (d <= t.r && state.mode !== 'track') {
+    onHit(cx, cy, d);
+  }
+});
+
+/* 位移累计：单独监听 mousemove 累加 movementX/Y（与命中判断解耦，避免重复） */
+overlay.addEventListener('pointermove', function(e){
+  if (!state.running || state.target.r <= 0) return;
+  if (e.movementX !== undefined || e.movementY !== undefined) {
+    state.moveAccum += Math.hypot(e.movementX || 0, e.movementY || 0);
+  }
+});
+
+window.__sensState = state;
+window.__sensToast = toast;
+window.__sensStart = startTest;
+})();
+</script>
+<script>
+/* ===== JS-PART2: 生成算法与图表 ===== */
+(function(){
+'use strict';
+var $ = function(s){ return document.querySelector(s); };
+var state = window.__sensState;
+
+var BASE_EDPI = { wrist:270, hybrid:240, arm:200 };
+var STYLE_LABEL = { wrist:'手腕流', hybrid:'混合流', arm:'手臂流' };
+var clamp = function(v,a,b){ return Math.max(a, Math.min(b, v)); };
+var round3 = function(v){ return Math.round(v*1000)/1000; };
+
+/* ---- 流派选择 ---- */
+var styleGroup = $('#styleGroup');
+styleGroup.addEventListener('click', function(e){
+  var inp = e.target.querySelector && e.target.querySelector('input');
+  if (e.target.classList.contains('style-opt') && inp) {
+    $$('.style-opt').forEach(function(o){ o.classList.remove('sel'); });
+    e.target.classList.add('sel');
+    inp.checked = true;
+  }
+});
+function $$(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); }
+function currentStyle(){
+  var el = styleGroup.querySelector('input:checked');
+  return el ? el.value : 'hybrid';
+}
+
+/* ---- 指标汇总显示 ---- */
+function updateMetrics(){
+  var R = state.results;
+  var m = {
+    mReactHpm: '—', mReactRt: '—', mPreciseErr: '—', mTrackHits: '—'
+  };
+  if (R.react) {
+    m.mReactHpm = R.react.hpm.toFixed(0) + ' /分';
+    m.mReactRt  = fmt(R.react.avgRT);
+  }
+  if (R.precise) {
+    m.mPreciseErr = R.precise.n ? (R.precise.avgErrRatio*100).toFixed(0) + '%' : '—';
+  }
+  if (R.track) {
+    m.mTrackHits = R.track.hits;
+  }
+  Object.keys(m).forEach(function(k){
+    var el = $('#'+k);
+    if (el) el.innerHTML = m[k] === '—' ? '—' : m[k].replace(' /分','<em> /分</em>');
+  });
+  if (R.precise) {
+    var pe = $('#mPreciseErr');
+    pe.classList.toggle('warn', R.precise.avgErrRatio > 0.45);
+  }
+}
+function fmt(v){ return (v||0).toFixed(2)+'s'; }
+
+/* ---- 生成算法：汇总测试表现 → 调整因子 ---- */
+function collectAdjust(){
+  var R = state.results;
+  var adjust = 0;
+  var reasons = [];
+
+  if (R.react) {
+    var a = R.react;
+    if (a.n >= 2) {
+      if (a.avgRT < 0.30)      { adjust += 0.05; reasons.push('反应命中极快（' + fmt(a.avgRT) + '），可承受更高灵敏度'); }
+      else if (a.avgRT > 0.60) { adjust -= 0.06; reasons.push('平均反应偏慢（' + fmt(a.avgRT) + '），略降灵敏度以换取稳定'); }
+    }
+    if (a.overRate > 0.30) { adjust -= 0.10; reasons.push('过度瞄准明显（' + pct(a.overRate) + '），灵敏度偏高，建议下调'); }
+    else if (a.overRate < 0.10 && a.n >= 3) { adjust += 0.03; reasons.push('移动路径干脆，无过冲（' + pct(a.overRate) + '）'); }
+    if (a.hpm < 40 && a.n >= 2) { adjust -= 0.05; reasons.push('单位时间命中偏少（' + a.hpm.toFixed(0) + ' 次/分），先求稳'); }
+  }
+  if (R.precise) {
+    var p = R.precise;
+    if (p.n >= 2) {
+      if (p.overRate > 0.30) { adjust -= 0.08; reasons.push('精度测试过冲率高（' + pct(p.overRate) + '），微调幅度过大'); }
+      if (p.underRate > 0.30) { adjust += 0.08; reasons.push('命中多落在目标边缘（' + pct(p.underRate) + '），接近距离不足，建议上调'); }
+      if (p.avgErrRatio < 0.30 && p.n >= 3) { adjust += 0.04; reasons.push('精度极高（平均误差 ' + (p.avgErrRatio*100).toFixed(0) + '% 半径），灵敏度可以更快'); }
+    }
+  }
+  if (R.track) {
+    var t = R.track;
+    if (t.n >= 2) {
+      if (t.crossRate > 0.30) { adjust -= 0.08; reasons.push('追踪时准星反复穿越目标（' + pct(t.crossRate) + '），灵敏度偏高'); }
+      else if (t.avgRT > 1.2) { adjust += 0.06; reasons.push('追踪捕获偏慢（平均 ' + fmt(t.avgRT) + '），灵敏度偏低，跟不上移动目标'); }
+      if (t.hits < 12 && t.crossRate <= 0.3) { adjust += 0.04; reasons.push('追踪命中偏少且无过冲，多为滞后追不上，建议上调'); }
+    }
+  }
+  adjust = clamp(adjust, -0.25, 0.25);
+  if (!R.react && !R.precise && !R.track) {
+    reasons.push('尚未完成任何测试，先回到上方完成至少一项瞄准测试');
+  }
+  return { adjust:adjust, reasons:reasons };
+}
+
+function pct(v){ return Math.round(v*100) + '%'; }
+
+/* ---- 生成主流程 ---- */
+function generate(){
+  var dpi = parseFloat($('#dpi').value);
+  if (!dpi || dpi < 100 || dpi > 16000) {
+    window.__sensToast('请先在 01 基础配置中填写有效的鼠标 DPI（100–16000）');
+    $('#dpi').focus();
+    return;
+  }
+  var curSens = parseFloat($('#curSens').value);
+  if (curSens && (curSens < 0.001 || curSens > 20)) {
+    window.__sensToast('当前灵敏度需在 0.001–20 之间');
+    return;
+  }
+  var style = currentStyle();
+  var calc = collectAdjust();
+  var adjust = calc.adjust;
+  var reasons = calc.reasons;
+
+  var base = BASE_EDPI[style];
+  var curEDPI = (curSens && curSens > 0) ? curSens * dpi : null;
+  var targetEDPI;
+  if (curEDPI) {
+    targetEDPI = curEDPI * (1 + adjust);
+    reasons.unshift('以你当前设置 ' + curSens + '（eDPI ' + Math.round(curEDPI) + '）为基准' + (adjust >= 0 ? '向上' : '向下') + '微调' + Math.abs(Math.round(adjust*100)) + '%');
+  } else {
+    targetEDPI = base * (1 + adjust);
+    reasons.unshift(STYLE_LABEL[style] + '基准 ' + base + ' eDPI，按测试表现调整 ' + (adjust >= 0 ? '+' : '') + Math.round(adjust*100) + '%');
+  }
+  targetEDPI = clamp(targetEDPI, 100, 600);
+
+  var sens = round3(clamp(targetEDPI / dpi, 0.001, 20));
+  var edpi = Math.round(sens * dpi);
+
+  /* ADS 建议 */
+  var ads = 1.00;
+  if (state.results.precise && state.results.precise.overRate > 0.30) ads = 0.90;
+  if (state.results.track && state.results.track.crossRate > 0.30) ads = Math.min(ads, 0.90);
+  var adsInput = $('#ads');
+  adsInput.value = ads.toFixed(2);
+
+  window.__lastCalc = { dpi:dpi, targetEDPI:targetEDPI, sens:sens, edpi:edpi, tweak:0, ads:ads };
+  renderResult(window.__lastCalc);
+  renderReasons(reasons);
+  updateEDPIBar(edpi, sens, dpi);
+  updateMetrics();
+  if (window.echarts) initCharts();
+}
+
+/* ---- 渲染灵敏度大数字 ---- */
+function renderResult(calc, doScroll){
+  var val = $('#sensValue');
+  val.childNodes[0].nodeValue = calc.sens.toFixed(3);
+  $('#edpiOut').textContent = calc.edpi;
+  $('#edpiLbl').textContent = calc.edpi + ' eDPI' + (calc.tweak !== 0 ? '（含 ' + (calc.tweak>0?'+':'') + Math.round(calc.tweak*100) + '% 微调）' : '');
+  var rs = $('#result');
+  rs.classList.add('show');
+  if (doScroll !== false) rs.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+/* ---- eDPI 刻度条 ---- */
+function updateEDPIBar(edpi, sens, dpi){
+  var pctV = clamp((edpi - 100) / 500 * 100, 0, 100);
+  var pro = $('#edpiPro');
+  pro.style.width = pctV + '%';
+  /* 目标刻度点 */
+  var old = pro.querySelector('.mark');
+  if (old) old.remove();
+  var m = document.createElement('div');
+  m.className = 'mark';
+  m.style.left = '100%';
+  m.title = edpi + ' eDPI（' + sens.toFixed(3) + ' × ' + dpi + '）';
+  pro.appendChild(m);
+}
+
+/* ---- 调整说明 ---- */
+function renderReasons(reasons){
+  var box = $('#reasonList');
+  if (!reasons || !reasons.length) { box.style.display='none'; return; }
+  box.style.display = 'block';
+  var html = '<h5>生成依据</h5><ul>';
+  reasons.forEach(function(r){ html += '<li>' + r + '</li>'; });
+  html += '</ul>';
+  box.innerHTML = html;
+}
+
+/* ---- 微调按钮 ---- */
+$('#tweakRow').addEventListener('click', function(e){
+  var btn = e.target.closest && e.target.closest('.btn[data-tweak]');
+  if (!btn || !window.__lastCalc) return;
+  $$('#tweakRow .btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  var tweak = parseFloat(btn.getAttribute('data-tweak'));
+  var c = window.__lastCalc;
+  c.tweak = tweak;
+  c.sens = round3(clamp(c.targetEDPI * (1 + tweak) / c.dpi, 0.001, 20));
+  c.edpi = Math.round(c.sens * c.dpi);
+  renderResult(c, false);
+  updateEDPIBar(c.edpi, c.sens, c.dpi);
+  $('#edpiLbl').textContent = c.edpi + ' eDPI（含 ' + (tweak>0?'+':'') + Math.round(tweak*100) + '% 微调）';
+});
+
+$('#genBtn').addEventListener('click', generate);
+
+/* ---- ECharts ---- */
+var charts = [];
+function baseOption(){
+  return {
+    backgroundColor:'transparent',
+    textStyle:{ color:'#8B9BA8', fontFamily:'Chakra Petch, Microsoft YaHei, sans-serif' },
+    grid:{ left:44, right:18, top:26, bottom:28 },
+    tooltip:{
+      backgroundColor:'#172433', borderColor:'#33495E', textStyle:{ color:'#ECE8E1', fontSize:12 },
+      axisPointer:{ lineStyle:{ color:'#33495E' } }
+    }
+  };
+}
+function initCharts(){
+  if (!window.echarts) return;
+  var reactBox = $('#chartReact');
+  var cmpBox = $('#chartCompare');
+  var qBox = $('#chartQuality');
+  if (!reactBox.clientWidth) return;
+
+  charts.forEach(function(c){ if (c) c.dispose(); });
+  charts = [];
+
+  /* 图1：反应时间序列 */
+  var c1 = echarts.init(reactBox);
+  var recs = (state.results.react && state.results.react.n >= 2) ? state.results.react : null;
+  var opt1 = baseOption();
+  opt1.title = { text:'', left:'center' };
+  if (recs) {
+    opt1.xAxis = { type:'category', data: recs.n ? Array.from({length:recs.n}, function(_,i){ return '#'+(i+1); }) : [], axisLabel:{ color:'#5C6B78', fontSize:10 }, axisLine:{ lineStyle:{ color:'#223243' } } };
+    opt1.yAxis = { type:'value', name:'秒', min:0, nameTextStyle:{ color:'#5C6B78' }, axisLabel:{ color:'#5C6B78', fontSize:10 }, splitLine:{ lineStyle:{ color:'rgba(255,255,255,.05)' } } };
+    opt1.series = [{
+      name:'反应时间', type:'line', data: recs.rt, smooth:true, showSymbol:true, symbol:'circle', symbolSize:5,
+      lineStyle:{ color:'#3ED0B4', width:2 }, itemStyle:{ color:'#3ED0B4' },
+      areaStyle:{ color:'rgba(62,208,180,.10)' },
+      markLine:{ silent:true, symbol:'none', lineStyle:{ color:'#FFB84D', type:'dashed' }, data:[{ yAxis:0.30, label:{ formatter:'0.30s 优秀线', color:'#FFB84D', fontSize:10 } }] }
+    }];
+  } else {
+    opt1 = baseOption();
+    opt1.xAxis = { show:false, type:'category', data:[] };
+    opt1.yAxis = { show:false, type:'value' };
+    opt1.series = [];
+    opt1.graphic = { type:'text', left:'center', top:'middle', style:{ text:'完成反应命中测试后展示', fill:'#5C6B78', fontSize:13 } };
+  }
+  c1.setOption(opt1);
+  charts.push(c1);
+
+  /* 图2：三项测试表现对比（每分钟命中数） */
+  var c2 = echarts.init(cmpBox);
+  var names = [], hpm = [];
+  ['react','precise','track'].forEach(function(m){
+    if (state.results[m]) { names.push({react:'反应命中', precise:'精度瞄准', track:'动态追踪'}[m]); hpm.push(round3(state.results[m].hpm)); }
+  });
+  var opt2 = baseOption();
+  if (names.length) {
+    opt2.xAxis = { type:'category', data:names, axisLabel:{ color:'#8B9BA8', fontSize:11 }, axisLine:{ lineStyle:{ color:'#223243' } } };
+    opt2.yAxis = { type:'value', name:'次/分', nameTextStyle:{ color:'#5C6B78' }, axisLabel:{ color:'#5C6B78', fontSize:10 }, splitLine:{ lineStyle:{ color:'rgba(255,255,255,.05)' } } };
+    opt2.series = [{
+      name:'每分钟命中', type:'bar', data:hpm, barWidth:'42%',
+      itemStyle:{ color:'#FF4655', borderRadius:[3,3,0,0] },
+      label:{ show:true, position:'top', color:'#ECE8E1', fontSize:11, formatter:function(p){ return p.value.toFixed(0); } }
+    }];
+  } else {
+    opt2 = baseOption();
+    opt2.xAxis = { show:false, type:'category', data:[] };
+    opt2.yAxis = { show:false, type:'value' };
+    opt2.series = [];
+    opt2.graphic = { type:'text', left:'center', top:'middle', style:{ text:'完成测试后展示', fill:'#5C6B78', fontSize:13 } };
+  }
+  c2.setOption(opt2);
+  charts.push(c2);
+
+  /* 图3：命中质量构成（全部测试合并） */
+  var c3 = echarts.init(qBox);
+  var over = 0, under = 0, normal = 0, totalN = 0;
+  ['react','precise','track'].forEach(function(m){
+    var r = state.results[m];
+    if (!r || !r.n) return;
+    totalN += r.n;
+    over += Math.round(r.overRate * r.n);
+    under += Math.round(r.underRate * r.n);
+  });
+  normal = totalN - over - under;
+  if (normal < 0) normal = 0;
+  var opt3 = baseOption();
+  if (totalN > 0) {
+    opt3.tooltip = { trigger:'item', backgroundColor:'#172433', borderColor:'#33495E', textStyle:{ color:'#ECE8E1', fontSize:12 } };
+    opt3.series = [{
+      type:'pie', radius:['52%','74%'], center:['50%','48%'],
+      itemStyle:{ borderColor:'#0A1017', borderWidth:2 },
+      label:{ color:'#8B9BA8', fontSize:11 },
+      data:[
+        { value:normal, name:'干脆命中', itemStyle:{ color:'#3ED0B4' } },
+        { value:over,   name:'过度瞄准', itemStyle:{ color:'#FF4655' } },
+        { value:under,  name:'瞄准不足', itemStyle:{ color:'#FFB84D' } }
+      ]
+    }];
+  } else {
+    opt3 = baseOption();
+    opt3.series = [];
+    opt3.graphic = { type:'text', left:'center', top:'middle', style:{ text:'完成测试后展示', fill:'#5C6B78', fontSize:13 } };
+  }
+  c3.setOption(opt3);
+  charts.push(c3);
+}
+
+/* 测试完成或窗口尺寸变化时重绘图表 */
+window.addEventListener('sens:tests-updated', function(){
+  updateMetrics();
+  if (window.__lastCalc) {
+    var c = window.__lastCalc;
+    updateEDPIBar(c.edpi, c.sens, c.dpi);
+  }
+  if (window.echarts && $('#result').classList.contains('show')) setTimeout(initCharts, 60);
+});
+window.addEventListener('resize', function(){
+  charts.forEach(function(c){ if (c) c.resize(); });
+});
+window.addEventListener('load', function(){
+  updateMetrics();
+  /* 图表容器当前隐藏，等结果区显示后再初始化 */
+});
+
+/* 首次加载：绑定 DPI 输入失焦提示 */
+$('#dpi').addEventListener('blur', function(){
+  var v = parseFloat(this.value);
+  if (this.value && (!v || v < 100 || v > 16000)) {
+    window.__sensToast('DPI 建议填写 100–16000 之间的数值');
+  }
+});
+})();
+</script>
+</body>
+</html>
